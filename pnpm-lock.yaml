@@ -39,7 +39,7 @@ importers:
       rimraf: ^3.0.2
       solhint: ^3.3.4
       solidity-coverage: ^0.8.2
-      tenderly: ^0.0.2
+      tenderly: ^0.0.3
       ts-node: ^10.9.1
       typechain: ^8.1.1
       typescript: ^4.8.4
@@ -51,7 +51,7 @@ importers:
       '@nomiclabs/hardhat-etherscan': 3.1.2_hardhat@2.12.2
       '@nomiclabs/hardhat-truffle5': 2.0.7_lsgryseezjzekdx5xkwhyzbbiy
       '@nomiclabs/hardhat-web3': 2.0.0_hardhat@2.12.2
-      '@tenderly/hardhat-tenderly': 1.3.0_hqfppn2mparriidirlellbd4ay
+      '@tenderly/hardhat-tenderly': 1.3.0_ioheo2dy3lb6ib7pa3qpr5lj5i
       '@typechain/ethers-v5': 10.1.1_q72wrh7ojpb4uyrkv7tihow6fq
       '@types/chai-as-promised': 7.1.5
       '@types/chai-string': 1.4.2
@@ -79,15 +79,19 @@ importers:
       rimraf: 3.0.2
       solhint: 3.3.7
       solidity-coverage: 0.8.2_hardhat@2.12.2
-      tenderly: 0.0.2_mwhvu7sfp6vq5ryuwb6hlbjfka
+      tenderly: 0.0.3_mwhvu7sfp6vq5ryuwb6hlbjfka
       ts-node: 10.9.1_typescript@4.8.4
       typechain: 8.1.1_typescript@4.8.4
       typescript: 4.8.4
 
   src:
     specifiers:
-      ethers: ^5.0.32
+      '@ethersproject/abi': ^5.7.0
+      '@ethersproject/providers': ^5.7.2
+      ethers: ^5.7.2
     optionalDependencies:
+      '@ethersproject/abi': 5.7.0
+      '@ethersproject/providers': 5.7.2
       ethers: 5.7.2
 
 packages:
@@ -1055,7 +1059,7 @@ packages:
       defer-to-connect: 2.0.1
     dev: true
 
-  /@tenderly/hardhat-tenderly/1.3.0_hqfppn2mparriidirlellbd4ay:
+  /@tenderly/hardhat-tenderly/1.3.0_ioheo2dy3lb6ib7pa3qpr5lj5i:
     resolution: {integrity: sha512-cQ1hiubv7z6A1ZpYBJwCDzmyG6d5Eh/lpcsT+e8QEBZewSUsEmb82BploBRHXGV5d/pRvzWN4xhGKLP6HB38VA==}
     peerDependencies:
       hardhat: ^2.10.2
@@ -1069,7 +1073,7 @@ packages:
       hardhat: 2.12.2_mwhvu7sfp6vq5ryuwb6hlbjfka
       hardhat-deploy: 0.11.20
       js-yaml: 4.1.0
-      tenderly: 0.0.2_mwhvu7sfp6vq5ryuwb6hlbjfka
+      tenderly: 0.0.3_mwhvu7sfp6vq5ryuwb6hlbjfka
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -1867,7 +1871,7 @@ packages:
   /axios/0.27.2:
     resolution: {integrity: sha512-t+yRIyySRTp/wua5xEr+z1q60QmLq8ABsS5O9Me1AsE5dfKqgnCFzwiCZZ/cGNd1lq4/7akDWMxdhVlucjmnOQ==}
     dependencies:
-      follow-redirects: 1.15.2_debug@4.3.4
+      follow-redirects: 1.15.2
       form-data: 4.0.0
     transitivePeerDependencies:
       - debug
@@ -4024,6 +4028,16 @@ packages:
       imul: 1.0.1
     dev: true
 
+  /follow-redirects/1.15.2:
+    resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
+    engines: {node: '>=4.0'}
+    peerDependencies:
+      debug: '*'
+    peerDependenciesMeta:
+      debug:
+        optional: true
+    dev: true
+
   /follow-redirects/1.15.2_debug@4.3.4:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
@@ -4415,23 +4429,6 @@ packages:
     resolution: {integrity: sha512-d65bNlIadxvpb/A2abVdlqKqV563juRnZ1Wtk6s1sIR8uNsXR70xqIzVqxVf1eTqDunwT2MkczEeaezCKTZhwA==}
     dependencies:
       get-intrinsic: 1.1.3
-    dev: true
-
-  /got/11.8.3:
-    resolution: {integrity: sha512-7gtQ5KiPh1RtGS9/Jbv1ofDpBFuq42gyfEib+ejaRBJuj/3tQFeR5+gw57e4ipaU8c/rCjvX6fkQz2lyDlGAOg==}
-    engines: {node: '>=10.19.0'}
-    dependencies:
-      '@sindresorhus/is': 4.6.0
-      '@szmarczak/http-timer': 4.0.6
-      '@types/cacheable-request': 6.0.2
-      '@types/responselike': 1.0.0
-      cacheable-lookup: 5.0.4
-      cacheable-request: 7.0.2
-      decompress-response: 6.0.0
-      http2-wrapper: 1.0.3
-      lowercase-keys: 2.0.0
-      p-cancelable: 2.1.1
-      responselike: 2.0.1
     dev: true
 
   /got/11.8.5:
@@ -7641,8 +7638,8 @@ packages:
       yallist: 3.1.1
     dev: true
 
-  /tenderly/0.0.2_mwhvu7sfp6vq5ryuwb6hlbjfka:
-    resolution: {integrity: sha512-nIr0hEG3GNlJHvPyhgBTQih2KAgy5YNtzK3PR18ZT5tIgjmOqczYgUnMglymR5CRxf1yodPnSxDZ1vVoolHLQw==}
+  /tenderly/0.0.3_mwhvu7sfp6vq5ryuwb6hlbjfka:
+    resolution: {integrity: sha512-dVf2uxrIOeLDRNDEXcQlV2xJt50TIx8zGQKlNj1deYTV3FYu2L0zheHBHaDU12GqAff2iiGYk+fKqFkK0bB0+w==}
     peerDependencies:
       ts-node: '*'
       typescript: '*'
@@ -7656,7 +7653,6 @@ packages:
       cli-table3: 0.6.3
       commander: 9.4.1
       express: 4.18.2
-      got: 11.8.3
       hyperlinker: 1.0.0
       js-yaml: 4.1.0
       open: 8.4.0

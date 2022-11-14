@@ -1,6 +1,6 @@
 {
-  "name": "item-purchase-contracts",
-  "version": "0.0.1",
+  "name": "@0xsequence/item-purchase-contracts",
+  "version": "0.1.0",
   "description": "item-purchase-contracts",
   "repository": "https://github.com/0xsequence/item-purchase-contracts",
   "license": "Apache-2.0",
@@ -8,7 +8,9 @@
   "types": "adapter/index.d.ts",
   "scripts": {},
   "optionalDependencies": {
-    "ethers": "^5.7.0"
+    "@ethersproject/abi": "^5.7.0",
+    "@ethersproject/providers": "^5.7.2",
+    "ethers": "^5.7.2"
   },
   "dependencies": {},
   "devDependencies": {},
