@@ -12,7 +12,9 @@
     "@ethersproject/providers": "^5.7.2",
     "ethers": "^5.7.2"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@0xsequence/erc-1155": "^3.2.4"
+  },
   "devDependencies": {},
   "keywords": [
     "Ethereum"

@@ -1,3 +1,3 @@
-export * as interfaces from "./interfaces";
-export * as migrations from "./migrations";
-export { Example__factory } from "./Example__factory";
+export * as mocks from "./mocks";
+export * as utils from "./utils";
+export { ItemPaymentProxy__factory } from "./ItemPaymentProxy__factory";

@@ -86,9 +86,12 @@ importers:
 
   src:
     specifiers:
+      '@0xsequence/erc-1155': ^3.2.4
       '@ethersproject/abi': ^5.7.0
       '@ethersproject/providers': ^5.7.2
       ethers: ^5.7.2
+    dependencies:
+      '@0xsequence/erc-1155': 3.2.4
     optionalDependencies:
       '@ethersproject/abi': 5.7.0
       '@ethersproject/providers': 5.7.2
@@ -106,6 +109,17 @@ packages:
       - bufferutil
       - utf-8-validate
     dev: true
+
+  /@0xsequence/erc-1155/3.2.4:
+    resolution: {integrity: sha512-HilZDnVmhlGjoJnpUSJEDCS6kHtCmpuAV0zvagKBOcq0fTFgNSnq1ateN2n2JGFKsEtk4kEQPn/y0Rk699da6g==}
+    optionalDependencies:
+      '@ethersproject/abi': 5.7.0
+      '@ethersproject/providers': 5.7.2
+      ethers: 5.7.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+    dev: false
 
   /@0xsequence/utils/0.42.9:
     resolution: {integrity: sha512-BqYp9HhH+IF7rreGAvMy/JXIiJGfD5GhyiBtHjO33fBLKVwlmVIJJsN0VRTuXpo+Lik28npEbgrGl1lXQBDlhA==}
@@ -1871,7 +1885,7 @@ packages:
   /axios/0.27.2:
     resolution: {integrity: sha512-t+yRIyySRTp/wua5xEr+z1q60QmLq8ABsS5O9Me1AsE5dfKqgnCFzwiCZZ/cGNd1lq4/7akDWMxdhVlucjmnOQ==}
     dependencies:
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.4
       form-data: 4.0.0
     transitivePeerDependencies:
       - debug
@@ -4026,16 +4040,6 @@ packages:
     resolution: {integrity: sha512-Y6hyofImk9JdzU8k5INtTXX1cu8LDlePWDFU5sftm9H+zKCr5SGrVjdhkvsim646cw5zD0nADj8oHyXMZmCZ9w==}
     dependencies:
       imul: 1.0.1
-    dev: true
-
-  /follow-redirects/1.15.2:
-    resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
-    engines: {node: '>=4.0'}
-    peerDependencies:
-      debug: '*'
-    peerDependenciesMeta:
-      debug:
-        optional: true
     dev: true
 
   /follow-redirects/1.15.2_debug@4.3.4:

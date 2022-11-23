@@ -1,5 +1,41 @@
-import { ethers } from 'ethers'
+import * as ethers from 'ethers'
+import { BigNumber } from 'ethers'
+import { ExternalProvider, TransactionResponse } from '@ethersproject/providers'
+import { Networkish } from '@ethersproject/networks'
+
+export const UNIT_ETH = ethers.utils.parseEther('1')
+export const HIGH_GAS_LIMIT = { gasLimit: 6e9 }
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+
+export type AssetRange = {
+  minID: BigNumber;
+  maxID: BigNumber;
+  startTime: BigNumber;
+  endTime: BigNumber;
+}
+
+
+export type BurnOrderRequest = {
+  itemRecipient: string
+  nonce: number | string | BigNumber
+  itemIDsPurchased: number[] | string[] | BigNumber[]
+}
+
+
+export const BurnOrderRequestType = `tuple(
+  address itemRecipient,
+  uint32 nonce,
+  uint256[] itemIDsPurchased
+)`
+
+export const getBurnOrderRequestData = (
+  itemRecipient: string,
+  nonce: number | BigNumber,
+  itemIDsPurchased: number[] | BigNumber[]
+) => {
+  const request: BurnOrderRequest = { itemRecipient, nonce, itemIDsPurchased }
+  return ethers.utils.defaultAbiCoder.encode([BurnOrderRequestType], [request])
+}
 
 // createTestWallet creates a new wallet
 export const createTestWallet = (web3: any, addressIndex: number = 0) => {
@@ -16,8 +52,16 @@ export const createTestWallet = (web3: any, addressIndex: number = 0) => {
 
 // Check if tx was Reverted with specified message
 export function RevertError(errorMessage?: string) {
-  let prefix = 'VM Exception while processing transaction: revert'
-  return errorMessage ? `${prefix + ' ' + errorMessage}` : prefix
+  if (!errorMessage) {
+    return /Transaction reverted and Hardhat couldn't infer the reason/
+  } else {
+    // return new RegExp(`${errorMessage}`)
+    return new RegExp(`VM Exception while processing transaction: reverted with reason string ["']${errorMessage}["']`)
+  }
+}
+
+export function RevertOutOfGasError() {
+  return /out of gas/
 }
 
 export interface JSONRPCRequest {
@@ -27,15 +71,23 @@ export interface JSONRPCRequest {
   params: any
 }
 
+export async function delay(ms: number) {
+  return new Promise(resolve =>
+    setTimeout(() => {
+      resolve(undefined)
+    }, ms)
+  )
+}
+
 export class Web3DebugProvider extends ethers.providers.JsonRpcProvider {
 
   public reqCounter = 0
   public reqLog: JSONRPCRequest[] = []
 
-  readonly _web3Provider: ethers.providers.ExternalProvider
+  readonly _web3Provider: ExternalProvider
   private _sendAsync: (request: any, callback: (error: any, response: any) => void) => void
 
-  constructor(web3Provider: ethers.providers.ExternalProvider, network?: ethers.providers.Networkish) {
+  constructor(web3Provider: ExternalProvider, network?: Networkish) {
       // HTTP has a host; IPC has a path.
       super(web3Provider.host || web3Provider.path || '', network)
 
@@ -98,42 +150,4 @@ export class Web3DebugProvider extends ethers.providers.JsonRpcProvider {
     return this.reqLog[this.reqLog.length-reverseIndex-1]
   }
 
-}
-
-// Take a message, hash it and sign it with ETH_SIGN SignatureType
-export async function ethSign(wallet: ethers.Wallet, message: string | Uint8Array, hashed = false) {
-  let hash = hashed ? message : ethers.utils.keccak256(message)
-  let hashArray = ethers.utils.arrayify(hash)
-  let ethsigNoType = await wallet.signMessage(hashArray)
-  return ethsigNoType.endsWith('03') || ethsigNoType.endsWith('02') ? ethsigNoType : ethsigNoType + '02'
-}
-
-export function compareAddr(a: string | ethers.Wallet, b: string | ethers.Wallet) {
-  const addrA = typeof a === 'string' ? a : a.address
-  const addrB = typeof b === 'string' ? b : b.address
-
-  const bigA = ethers.BigNumber.from(addrA)
-  const bigB = ethers.BigNumber.from(addrB)
-
-  if (bigA.lt(bigB)) {
-    return -1
-  } else if (bigA.eq(bigB)) {
-    return 0
-  } else {
-    return 1
-  }
-}
-
-function xor(a, b) {
-  if (!Buffer.isBuffer(a)) a = Buffer.from(ethers.utils.arrayify(a))
-  if (!Buffer.isBuffer(b)) b = Buffer.from(ethers.utils.arrayify(b))
-  return ethers.utils.hexlify(a.map((v: number, i: number) => v ^ b[i]))
-}
-
-export function interfaceIdOf(int: ethers.utils.Interface): string {
-  const signatures = Object.keys(int.functions)
-    .filter((k) => k.indexOf('(') !== -1)
-    .map((k) => int.getSighash(int.functions[k]))
-
-  return signatures.reduce((p, c) => xor(p, c))
 }

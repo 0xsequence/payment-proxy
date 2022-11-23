@@ -7,6 +7,7 @@ import { ethers } from 'ethers'
 
 export * from './contract'
 export * from './helpers'
+export * from './data'
 
 const BigNumber = ethers.BigNumber
 export { BigNumber }
