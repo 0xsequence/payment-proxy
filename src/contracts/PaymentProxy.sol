@@ -12,19 +12,20 @@ import "@0xsequence/erc-1155/contracts/interfaces/IERC1155TokenReceiver.sol";
 /**
  * @notice Allows users to purchase off-chain assets with ERC-20s or by burning ERC-1155 tokens
  */
-contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
+contract PaymentProxy is IERC1155TokenReceiver, Ownable {
 
   /***********************************|
   |             Variables             |
   |__________________________________*/
 
   // Track payment nonces to prevent accidental repeat orders
-  mapping (address => uint32) public nonces;
+  mapping (address => uint256) public nonces;
+  string public name; // Name of contract
 
   // Encoded data in ERC-1155 transfers, for log event
   struct BurnOrder {
     address itemRecipient;      // Who is supposed to receive the items
-    uint32 nonce;               // Transaction nonce 
+    uint256 nonce;              // Transaction nonce 
     uint256[] itemIDsPurchased; // Items that are supposed to be received
   }
 
@@ -32,8 +33,8 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
   |               Events              |
   |__________________________________*/
 
-  event ItemPurchase(address indexed itemRecipient, uint32 indexed nonce, uint256[] itemIDsPurchased);
-  event ItemBurn(address indexed itemRecipient, uint32 indexed nonce, uint256[] itemIDsPurchased);
+  event ItemPurchase(address indexed spender, address indexed itemRecipient, uint256 indexed nonce, uint256[] itemIDsPurchased);
+  event ItemBurn(address indexed spender, address indexed itemRecipient, uint256 indexed nonce, uint256[] itemIDsPurchased);
 
   /***********************************|
   |            Constructor            |
@@ -42,8 +43,11 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
   /**
    * @notice Create payment proxy and assign ownership
    * @param _firstOwner Address of the initial owner
+   * @param _name       Name of PaymentProxy
    */
-  constructor(address _firstOwner) Ownable(_firstOwner) { }
+  constructor(address _firstOwner, string memory _name) Ownable(_firstOwner) { 
+    name = _name;
+  }
 
 
   /***********************************|
@@ -63,19 +67,20 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
     // Validate currency address and amount
     require(
       _currencyToken != address(0x0) && _currencyAmount > 0,
-      "ItemPaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT"
+      "PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT"
     );
 
     // Check if nonce is OK, then increment
-    require(nonces[msg.sender] == _nonce && _nonce != 2**32-1, "ItemPaymentProxy#purchaseItems: INVALID_NONCE");
-    nonces[msg.sender] = nonces[msg.sender] + 1;
+    uint256 currentNonce = nonces[msg.sender];
+    require(currentNonce == _nonce, "PaymentProxy#purchaseItems: INVALID_NONCE");
+    nonces[msg.sender] = currentNonce + 1;
 
     // If an address is specifiedm use it as receiver, otherwise use msg.sender address
     address itemRecipient = _itemRecipient != address(0x0) ? _itemRecipient : msg.sender;
 
     // Transfer currency tokens here
     TransferHelper.safeTransferFrom(_currencyToken, msg.sender, address(this), _currencyAmount);
-    emit ItemPurchase(itemRecipient, _nonce, _itemIDsPurchased);
+    emit ItemPurchase(msg.sender, itemRecipient, _nonce, _itemIDsPurchased);
   }
 
 
@@ -87,7 +92,7 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
    * @notice Prevents receiving Ether or calls to unsuported methods
    */
   fallback () external {
-    revert("ItemPaymentProxy#_: UNSUPPORTED_METHOD");
+    revert("PaymentProxy#_: UNSUPPORTED_METHOD");
   }
 
   /**
@@ -139,12 +144,13 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
     address itemRecipient = burnOrder.itemRecipient != address(0x0) ? burnOrder.itemRecipient : _from;
 
     // Check if nonce is OK, then increment
-    require(nonces[_from] == burnOrder.nonce && burnOrder.nonce != 2**32-1, "ItemPaymentProxy#onERC1155BatchReceived: INVALID_NONCE");
-    nonces[_from] = nonces[_from] + 1;
+    uint256 currentNonce = nonces[msg.sender];
+    require(currentNonce == burnOrder.nonce, "PaymentProxy#onERC1155BatchReceived: INVALID_NONCE");
+    nonces[_from] = currentNonce + 1;
 
     // Burn items received & emit event. msg.sender is the token contract
     IERC1155MintBurn(msg.sender).batchBurn(_ids, _amounts);
-    emit ItemBurn(itemRecipient, burnOrder.nonce, burnOrder.itemIDsPurchased);
+    emit ItemBurn(_from, itemRecipient, burnOrder.nonce, burnOrder.itemIDsPurchased);
 
     // Return success
     return IERC1155TokenReceiver.onERC1155BatchReceived.selector;
@@ -156,7 +162,7 @@ contract ItemPaymentProxy is IERC1155TokenReceiver, Ownable {
    * @param _erc20     Address of ERC-20 token to transfer out
    */
   function withdrawERC20(address _recipient, address _erc20) external onlyOwner() {
-    require(_recipient != address(0x0), "ItemPaymentProxy#withdrawERC20: INVALID_RECIPIENT");
+    require(_recipient != address(0x0), "PaymentProxy#withdrawERC20: INVALID_RECIPIENT");
     uint256 this_balance = IERC20(_erc20).balanceOf(address(this));
     IERC20(_erc20).transfer(_recipient, this_balance);
   }
