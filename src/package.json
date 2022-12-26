@@ -1,8 +1,8 @@
 {
-  "name": "@0xsequence/item-purchase-contracts",
-  "version": "0.1.1",
-  "description": "item-purchase-contracts",
-  "repository": "https://github.com/0xsequence/item-purchase-contracts",
+  "name": "@0xsequence/payment-proxy",
+  "version": "0.1.0",
+  "description": "payment-proxy",
+  "repository": "https://github.com/0xsequence/payment-proxy",
   "license": "Apache-2.0",
   "main": "adapter/index.js",
   "types": "adapter/index.d.ts",
