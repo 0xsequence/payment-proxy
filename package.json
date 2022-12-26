@@ -1,5 +1,5 @@
 {
-  "name": "payment-proxy",
+  "name": "@0xsequence/payment-proxy",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
@@ -84,5 +84,27 @@
     "ganacheGasPrice": "2",
     "etherBalance": "100000",
     "extra": ""
-  }
+  },
+  "description": "item-purchase-contracts =======================",
+  "version": "1.0.0",
+  "main": ".eslintrc.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xsequence/payment-proxy.git"
+  },
+  "keywords": [
+    "ethereum",
+    "erc20",
+    "erc1155",
+    "nft",
+    "payment"
+  ],
+  "author": "phabc",
+  "bugs": {
+    "url": "https://github.com/0xsequence/payment-proxy/issues"
+  },
+  "homepage": "https://github.com/0xsequence/payment-proxy#readme"
 }
