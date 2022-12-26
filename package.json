@@ -1,6 +1,6 @@
 {
   "name": "@0xsequence/payment-proxy",
-  "private": true,
+  "private": false,
   "license": "Apache-2.0",
   "scripts": {
     "build": "pnpm clean && pnpm compile && pnpm adapter",
