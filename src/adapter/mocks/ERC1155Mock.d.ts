@@ -94,21 +94,21 @@ export interface ApprovalForAllEventObject {
     _operator: string;
     _approved: boolean;
 }
-export type ApprovalForAllEvent = TypedEvent<[
+export declare type ApprovalForAllEvent = TypedEvent<[
     string,
     string,
     boolean
 ], ApprovalForAllEventObject>;
-export type ApprovalForAllEventFilter = TypedEventFilter<ApprovalForAllEvent>;
+export declare type ApprovalForAllEventFilter = TypedEventFilter<ApprovalForAllEvent>;
 export interface OwnershipTransferredEventObject {
     previousOwner: string;
     newOwner: string;
 }
-export type OwnershipTransferredEvent = TypedEvent<[
+export declare type OwnershipTransferredEvent = TypedEvent<[
     string,
     string
 ], OwnershipTransferredEventObject>;
-export type OwnershipTransferredEventFilter = TypedEventFilter<OwnershipTransferredEvent>;
+export declare type OwnershipTransferredEventFilter = TypedEventFilter<OwnershipTransferredEvent>;
 export interface TransferBatchEventObject {
     _operator: string;
     _from: string;
@@ -116,14 +116,14 @@ export interface TransferBatchEventObject {
     _ids: BigNumber[];
     _amounts: BigNumber[];
 }
-export type TransferBatchEvent = TypedEvent<[
+export declare type TransferBatchEvent = TypedEvent<[
     string,
     string,
     string,
     BigNumber[],
     BigNumber[]
 ], TransferBatchEventObject>;
-export type TransferBatchEventFilter = TypedEventFilter<TransferBatchEvent>;
+export declare type TransferBatchEventFilter = TypedEventFilter<TransferBatchEvent>;
 export interface TransferSingleEventObject {
     _operator: string;
     _from: string;
@@ -131,20 +131,20 @@ export interface TransferSingleEventObject {
     _id: BigNumber;
     _amount: BigNumber;
 }
-export type TransferSingleEvent = TypedEvent<[
+export declare type TransferSingleEvent = TypedEvent<[
     string,
     string,
     string,
     BigNumber,
     BigNumber
 ], TransferSingleEventObject>;
-export type TransferSingleEventFilter = TypedEventFilter<TransferSingleEvent>;
+export declare type TransferSingleEventFilter = TypedEventFilter<TransferSingleEvent>;
 export interface URIEventObject {
     _uri: string;
     _id: BigNumber;
 }
-export type URIEvent = TypedEvent<[string, BigNumber], URIEventObject>;
-export type URIEventFilter = TypedEventFilter<URIEvent>;
+export declare type URIEvent = TypedEvent<[string, BigNumber], URIEventObject>;
+export declare type URIEventFilter = TypedEventFilter<URIEvent>;
 export interface ERC1155Mock extends BaseContract {
     connect(signerOrProvider: Signer | Provider | string): this;
     attach(addressOrName: string): this;

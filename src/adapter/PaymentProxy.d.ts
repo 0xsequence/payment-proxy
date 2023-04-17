@@ -66,35 +66,35 @@ export interface ItemBurnEventObject {
     nonce: BigNumber;
     itemIDsPurchased: BigNumber[];
 }
-export type ItemBurnEvent = TypedEvent<[
+export declare type ItemBurnEvent = TypedEvent<[
     string,
     string,
     BigNumber,
     BigNumber[]
 ], ItemBurnEventObject>;
-export type ItemBurnEventFilter = TypedEventFilter<ItemBurnEvent>;
+export declare type ItemBurnEventFilter = TypedEventFilter<ItemBurnEvent>;
 export interface ItemPurchaseEventObject {
     spender: string;
     itemRecipient: string;
     nonce: BigNumber;
     itemIDsPurchased: BigNumber[];
 }
-export type ItemPurchaseEvent = TypedEvent<[
+export declare type ItemPurchaseEvent = TypedEvent<[
     string,
     string,
     BigNumber,
     BigNumber[]
 ], ItemPurchaseEventObject>;
-export type ItemPurchaseEventFilter = TypedEventFilter<ItemPurchaseEvent>;
+export declare type ItemPurchaseEventFilter = TypedEventFilter<ItemPurchaseEvent>;
 export interface OwnershipTransferredEventObject {
     previousOwner: string;
     newOwner: string;
 }
-export type OwnershipTransferredEvent = TypedEvent<[
+export declare type OwnershipTransferredEvent = TypedEvent<[
     string,
     string
 ], OwnershipTransferredEventObject>;
-export type OwnershipTransferredEventFilter = TypedEventFilter<OwnershipTransferredEvent>;
+export declare type OwnershipTransferredEventFilter = TypedEventFilter<OwnershipTransferredEvent>;
 export interface PaymentProxy extends BaseContract {
     connect(signerOrProvider: Signer | Provider | string): this;
     attach(addressOrName: string): this;

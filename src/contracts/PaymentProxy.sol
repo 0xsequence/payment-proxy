@@ -144,7 +144,7 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
     address itemRecipient = burnOrder.itemRecipient != address(0x0) ? burnOrder.itemRecipient : _from;
 
     // Check if nonce is OK, then increment
-    uint256 currentNonce = nonces[msg.sender];
+    uint256 currentNonce = nonces[_from];
     require(currentNonce == burnOrder.nonce, "PaymentProxy#onERC1155BatchReceived: INVALID_NONCE");
     nonces[_from] = currentNonce + 1;
 

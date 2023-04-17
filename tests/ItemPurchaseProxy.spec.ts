@@ -197,9 +197,15 @@ describe('PaymentProxy', () => {
       })
 
       it('should update user payment nonce', async () => {
+        // Do another txn for better validation
+        await erc20Contract.mockMint(userAddress, baseTokenAmount)
+        await userErc20Contract.approve(proxy, baseTokenAmount)
+        await userPaymentContract.purchaseItems(currency, baseTokenAmount, 1, [purchasedItemID], recipientAddress, TX_PARAM)
+      
         const nonce = await paymentContract.nonces(userAddress)
-        expect(nonce).to.be.eql(BigNumber.from(1))
+        expect(nonce).to.be.eql(BigNumber.from(2))
       })
+      
       
       it('should increase proxy ERC-20 balance to amount received', async () => {
         const balance = await erc20Contract.balanceOf(proxy)
@@ -307,8 +313,13 @@ describe('PaymentProxy', () => {
       })
 
       it('should update user payment nonce', async () => {
+        // Do another txn for better validation
+        await erc1155Contract.batchMint(userAddress, ids, amounts , [])
+        const data2 = getBurnOrderRequestData(recipientAddress, 1, [purchasedItemID])
+        await userErc1155Contract.safeBatchTransferFrom(userAddress, proxy, ids, amounts, data2, TX_PARAM)
+      
         const nonce = await paymentContract.nonces(userAddress)
-        expect(nonce).to.be.eql(BigNumber.from(1))
+        expect(nonce).to.be.eql(BigNumber.from(2))
       })
       
       it('should leave proxy ERC-1155 balance of 0', async () => {
