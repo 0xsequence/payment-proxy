@@ -85,7 +85,7 @@
     "etherBalance": "100000",
     "extra": ""
   },
-  "description": "item-purchase-contracts =======================",
+  "description": "Proxy Payment Contract",
   "version": "1.0.0",
   "main": ".eslintrc.js",
   "directories": {
