@@ -13,7 +13,9 @@
     "ethers": "^5.7.2"
   },
   "dependencies": {
-    "@0xsequence/erc-1155": "^3.2.4"
+    "@0xsequence/erc-1155": "^3.2.4",
+    "@0xsequence/niftyswap": "5.1.0",
+    "@uniswap/lib": "4.0.1-alpha"
   },
   "devDependencies": {},
   "keywords": [

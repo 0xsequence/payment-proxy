@@ -4,6 +4,7 @@ import type { Listener, Provider } from "@ethersproject/providers";
 import type { TypedEventFilter, TypedEvent, TypedListener, OnEvent, PromiseOrValue } from "./common";
 export interface PaymentProxyInterface extends utils.Interface {
     functions: {
+        "buyAndBurn(address,uint256[],uint256[],address,uint256,uint32,uint256[],address)": FunctionFragment;
         "getOwner()": FunctionFragment;
         "name()": FunctionFragment;
         "nonces(address)": FunctionFragment;
@@ -14,7 +15,17 @@ export interface PaymentProxyInterface extends utils.Interface {
         "transferOwnership(address)": FunctionFragment;
         "withdrawERC20(address,address)": FunctionFragment;
     };
-    getFunction(nameOrSignatureOrTopic: "getOwner" | "name" | "nonces" | "onERC1155BatchReceived" | "onERC1155Received" | "purchaseItems" | "supportsInterface" | "transferOwnership" | "withdrawERC20"): FunctionFragment;
+    getFunction(nameOrSignatureOrTopic: "buyAndBurn" | "getOwner" | "name" | "nonces" | "onERC1155BatchReceived" | "onERC1155Received" | "purchaseItems" | "supportsInterface" | "transferOwnership" | "withdrawERC20"): FunctionFragment;
+    encodeFunctionData(functionFragment: "buyAndBurn", values: [
+        PromiseOrValue<string>,
+        PromiseOrValue<BigNumberish>[],
+        PromiseOrValue<BigNumberish>[],
+        PromiseOrValue<string>,
+        PromiseOrValue<BigNumberish>,
+        PromiseOrValue<BigNumberish>,
+        PromiseOrValue<BigNumberish>[],
+        PromiseOrValue<string>
+    ]): string;
     encodeFunctionData(functionFragment: "getOwner", values?: undefined): string;
     encodeFunctionData(functionFragment: "name", values?: undefined): string;
     encodeFunctionData(functionFragment: "nonces", values: [PromiseOrValue<string>]): string;
@@ -42,6 +53,7 @@ export interface PaymentProxyInterface extends utils.Interface {
     encodeFunctionData(functionFragment: "supportsInterface", values: [PromiseOrValue<BytesLike>]): string;
     encodeFunctionData(functionFragment: "transferOwnership", values: [PromiseOrValue<string>]): string;
     encodeFunctionData(functionFragment: "withdrawERC20", values: [PromiseOrValue<string>, PromiseOrValue<string>]): string;
+    decodeFunctionResult(functionFragment: "buyAndBurn", data: BytesLike): Result;
     decodeFunctionResult(functionFragment: "getOwner", data: BytesLike): Result;
     decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
     decodeFunctionResult(functionFragment: "nonces", data: BytesLike): Result;
@@ -110,6 +122,9 @@ export interface PaymentProxy extends BaseContract {
     once: OnEvent<this>;
     removeListener: OnEvent<this>;
     functions: {
+        buyAndBurn(_niftyswapAddress: PromiseOrValue<string>, _swapTokenIds: PromiseOrValue<BigNumberish>[], _swapAmounts: PromiseOrValue<BigNumberish>[], _currencyToken: PromiseOrValue<string>, _currencyAmount: PromiseOrValue<BigNumberish>, _nonce: PromiseOrValue<BigNumberish>, _itemIDsPurchased: PromiseOrValue<BigNumberish>[], _itemRecipient: PromiseOrValue<string>, overrides?: Overrides & {
+            from?: PromiseOrValue<string>;
+        }): Promise<ContractTransaction>;
         getOwner(overrides?: CallOverrides): Promise<[string]>;
         name(overrides?: CallOverrides): Promise<[string]>;
         nonces(arg0: PromiseOrValue<string>, overrides?: CallOverrides): Promise<[BigNumber]>;
@@ -130,6 +145,9 @@ export interface PaymentProxy extends BaseContract {
             from?: PromiseOrValue<string>;
         }): Promise<ContractTransaction>;
     };
+    buyAndBurn(_niftyswapAddress: PromiseOrValue<string>, _swapTokenIds: PromiseOrValue<BigNumberish>[], _swapAmounts: PromiseOrValue<BigNumberish>[], _currencyToken: PromiseOrValue<string>, _currencyAmount: PromiseOrValue<BigNumberish>, _nonce: PromiseOrValue<BigNumberish>, _itemIDsPurchased: PromiseOrValue<BigNumberish>[], _itemRecipient: PromiseOrValue<string>, overrides?: Overrides & {
+        from?: PromiseOrValue<string>;
+    }): Promise<ContractTransaction>;
     getOwner(overrides?: CallOverrides): Promise<string>;
     name(overrides?: CallOverrides): Promise<string>;
     nonces(arg0: PromiseOrValue<string>, overrides?: CallOverrides): Promise<BigNumber>;
@@ -150,6 +168,7 @@ export interface PaymentProxy extends BaseContract {
         from?: PromiseOrValue<string>;
     }): Promise<ContractTransaction>;
     callStatic: {
+        buyAndBurn(_niftyswapAddress: PromiseOrValue<string>, _swapTokenIds: PromiseOrValue<BigNumberish>[], _swapAmounts: PromiseOrValue<BigNumberish>[], _currencyToken: PromiseOrValue<string>, _currencyAmount: PromiseOrValue<BigNumberish>, _nonce: PromiseOrValue<BigNumberish>, _itemIDsPurchased: PromiseOrValue<BigNumberish>[], _itemRecipient: PromiseOrValue<string>, overrides?: CallOverrides): Promise<void>;
         getOwner(overrides?: CallOverrides): Promise<string>;
         name(overrides?: CallOverrides): Promise<string>;
         nonces(arg0: PromiseOrValue<string>, overrides?: CallOverrides): Promise<BigNumber>;
@@ -169,6 +188,9 @@ export interface PaymentProxy extends BaseContract {
         OwnershipTransferred(previousOwner?: PromiseOrValue<string> | null, newOwner?: PromiseOrValue<string> | null): OwnershipTransferredEventFilter;
     };
     estimateGas: {
+        buyAndBurn(_niftyswapAddress: PromiseOrValue<string>, _swapTokenIds: PromiseOrValue<BigNumberish>[], _swapAmounts: PromiseOrValue<BigNumberish>[], _currencyToken: PromiseOrValue<string>, _currencyAmount: PromiseOrValue<BigNumberish>, _nonce: PromiseOrValue<BigNumberish>, _itemIDsPurchased: PromiseOrValue<BigNumberish>[], _itemRecipient: PromiseOrValue<string>, overrides?: Overrides & {
+            from?: PromiseOrValue<string>;
+        }): Promise<BigNumber>;
         getOwner(overrides?: CallOverrides): Promise<BigNumber>;
         name(overrides?: CallOverrides): Promise<BigNumber>;
         nonces(arg0: PromiseOrValue<string>, overrides?: CallOverrides): Promise<BigNumber>;
@@ -190,6 +212,9 @@ export interface PaymentProxy extends BaseContract {
         }): Promise<BigNumber>;
     };
     populateTransaction: {
+        buyAndBurn(_niftyswapAddress: PromiseOrValue<string>, _swapTokenIds: PromiseOrValue<BigNumberish>[], _swapAmounts: PromiseOrValue<BigNumberish>[], _currencyToken: PromiseOrValue<string>, _currencyAmount: PromiseOrValue<BigNumberish>, _nonce: PromiseOrValue<BigNumberish>, _itemIDsPurchased: PromiseOrValue<BigNumberish>[], _itemRecipient: PromiseOrValue<string>, overrides?: Overrides & {
+            from?: PromiseOrValue<string>;
+        }): Promise<PopulatedTransaction>;
         getOwner(overrides?: CallOverrides): Promise<PopulatedTransaction>;
         name(overrides?: CallOverrides): Promise<PopulatedTransaction>;
         nonces(arg0: PromiseOrValue<string>, overrides?: CallOverrides): Promise<PopulatedTransaction>;

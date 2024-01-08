@@ -2,11 +2,12 @@ import * as ethers from 'ethers'
 
 import { AbstractContract, expect, RevertError, createTestWallet, getBurnOrderRequestData, ZERO_ADDRESS } from './utils'
 
-import { ERC1155Mock, ERC20MintMock, PaymentProxy } from 'src/cache/typechain'
+import { ERC1155Mock, ERC20MintMock, NiftyswapExchange20Mock, NiftyswapFactory20Mock, PaymentProxy } from 'src/cache/typechain'
 
 import { BigNumber, constants } from 'ethers'
 
 import { web3 } from 'hardhat'
+import { deployNiftyswapFactory20, getAddLiquidityData } from './utils/niftyswap'
 
 // init test wallets from package.json mnemonic
 
@@ -25,6 +26,7 @@ describe('PaymentProxy', () => {
   let erc20Abstract: AbstractContract
   let paymentAbstract: AbstractContract
   let erc1155Abstract: AbstractContract
+  let niftyswapAbstract: AbstractContract
 
   // ERC-20 currency contract
   let erc20Contract: ERC20MintMock
@@ -41,7 +43,7 @@ describe('PaymentProxy', () => {
   let userPaymentContract: PaymentProxy
 
   // Pass gas since ganache can't figure it out
-  let TX_PARAM = { gasLimit: 2000000 }
+  let TX_PARAM = { gasLimit: 5000000 }
 
   // ERC-1155 Token Param
   const nTokenTypes = BigNumber.from(30).add(1)
@@ -55,12 +57,13 @@ describe('PaymentProxy', () => {
   const proxyName = 'TEST PAYMENT'
 
   // Arrays for ERC-1155
-  const ids = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => getBig(i + 1))
-  const amounts = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => nTokensPerType)
+  const ids = new Array(nTokenTypes.toNumber()).fill('').map((_a, i) => getBig(i + 1))
+  const amounts = new Array(nTokenTypes.toNumber()).fill(nTokensPerType)
 
   // Init addresses
   let proxy
   let currency
+  let token
 
   // load contract abi and deploy to test server
   before(async () => {
@@ -70,6 +73,7 @@ describe('PaymentProxy', () => {
     erc20Abstract = await AbstractContract.fromArtifactName('ERC20MintMock')
     erc1155Abstract = await AbstractContract.fromArtifactName('ERC1155Mock')
     paymentAbstract = await AbstractContract.fromArtifactName('PaymentProxy')
+    niftyswapAbstract = await AbstractContract.fromArtifactName('NiftyswapExchange20Mock')
   })
 
   // deploy before each test, to reset state of contract
@@ -86,9 +90,10 @@ describe('PaymentProxy', () => {
     paymentContract = (await paymentAbstract.deploy(ownerWallet, [ownerAddress, proxyName])) as PaymentProxy
     userPaymentContract = (await paymentContract.connect(userSigner)) as PaymentProxy
 
-    // Assing vars
+    // Address vars
     proxy = paymentContract.address
     currency = erc20Contract.address
+    token = erc1155Contract.address
 
     // Mint tokens to user
     await erc20Contract.mockMint(userAddress, baseTokenAmount)
@@ -347,7 +352,7 @@ describe('PaymentProxy', () => {
       })
 
       it('should leave proxy ERC-1155 balance of 0', async () => {
-        let proxy_addresses = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => proxy)
+        let proxy_addresses = new Array(nTokenTypes.toNumber()).fill(proxy)
         let proxy_balances = await userErc1155Contract.balanceOfBatch(proxy_addresses, ids)
         for (let i = 0; i < ids.length; i++) {
           expect(proxy_balances[i]).to.be.eql(constants.Zero)
@@ -355,7 +360,7 @@ describe('PaymentProxy', () => {
       })
 
       it('should update users ERC-1155 balance', async () => {
-        let user_addresses = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => userAddress)
+        let user_addresses = new Array(nTokenTypes.toNumber()).fill(userAddress)
         let userBalances = await userErc1155Contract.balanceOfBatch(user_addresses, ids)
         for (let i = 0; i < ids.length; i++) {
           expect(userBalances[i]).to.be.eql(constants.Zero)
@@ -410,6 +415,206 @@ describe('PaymentProxy', () => {
 
         it('should have correct item purchased as `itemIDsPurchased` field', async () => {
           expect(args.itemIDsPurchased[0]).to.be.eql(BigNumber.from(purchasedItemID))
+        })
+      })
+    })
+
+    describe('Buy and Burn', () => {
+      let niftyswap: string
+
+      let deadline = Math.floor(Date.now() / 1000) + 100000
+      let swapAmounts = new Array(nTokenTypes.toNumber()).fill(BigNumber.from(100))
+
+      before(async () => {
+        // Set up Niftyswap
+        data = getBurnOrderRequestData(recipientAddress, 0, [purchasedItemID])
+      })
+
+      // deploy before each test, to reset state of contract
+      beforeEach(async () => {
+        // Deploy Niftyswap
+        const niftyswapFactoryContract = (await deployNiftyswapFactory20(ownerWallet, ownerAddress)) as NiftyswapFactory20Mock
+        await niftyswapFactoryContract.createExchange(token, currency, 0, 0)
+        niftyswap = await niftyswapFactoryContract.tokensToExchange(token, currency, 0, 0)
+
+        // Add liquidity
+        await erc20Contract.mockMint(ownerAddress, baseTokenAmount)
+        await erc20Contract.approve(niftyswap, baseTokenAmount)
+        await erc1155Contract.batchMint(ownerAddress, ids, amounts, [])
+        const currPerLiq = baseTokenAmount.div(nTokenTypes)
+        const maxCurrencies = new Array(nTokenTypes.toNumber()).fill(currPerLiq)
+        await erc1155Contract.safeBatchTransferFrom(
+          ownerAddress,
+          niftyswap,
+          ids,
+          amounts,
+          getAddLiquidityData(maxCurrencies, deadline),
+          TX_PARAM
+        )
+
+        // Approve the proxy to transfer ERC-20 for user
+        await userErc20Contract.approve(proxy, baseTokenAmount)
+      })
+
+      it('should PASS if swap succeeds', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          0,
+          [purchasedItemID],
+          recipientAddress,
+          TX_PARAM
+        )
+        await expect(tx).to.be.fulfilled
+      })
+
+      it('should PASS if recipient is 0x0', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          0,
+          [purchasedItemID],
+          ethers.constants.AddressZero,
+          TX_PARAM
+        )
+        await expect(tx).to.be.fulfilled
+
+        // Check event
+        let filterFromOperatorContract: ethers.ethers.EventFilter
+
+        // Get event filter to get internal tx event
+        filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+        // Get logs from internal transaction event
+        // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+        filterFromOperatorContract.fromBlock = 0
+        const logs = await ownerProvider.getLogs(filterFromOperatorContract)
+
+        let args = paymentContract.interface.decodeEventLog(
+          paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+          logs[0].data,
+          logs[0].topics
+        )
+        expect(args.itemRecipient).to.be.eql(userAddress)
+      })
+
+      it('should REVERT if nonce is incorrect', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          1,
+          [purchasedItemID],
+          recipientAddress,
+          TX_PARAM
+        )
+        await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#onERC1155BatchReceived: INVALID_NONCE'))
+      })
+
+      context('When purchase completed', () => {
+        beforeEach(async () => {
+          await userPaymentContract.buyAndBurn(
+            niftyswap,
+            ids,
+            swapAmounts,
+            currency,
+            baseTokenAmount, // Overpayment
+            0,
+            [purchasedItemID],
+            recipientAddress,
+            TX_PARAM
+          )
+        })
+
+        it('should update user payment nonce', async () => {
+          const nonce = await paymentContract.nonces(userAddress)
+          expect(nonce).to.be.eql(BigNumber.from(1))
+        })
+
+        it('should leave proxy ERC-1155 balance of 0', async () => {
+          let proxy_addresses = new Array(nTokenTypes.toNumber()).fill(proxy)
+          let proxy_balances = await userErc1155Contract.balanceOfBatch(proxy_addresses, ids)
+          for (let i = 0; i < ids.length; i++) {
+            expect(proxy_balances[i]).to.be.eql(constants.Zero)
+          }
+        })
+
+        it('should update ERC-20 balances', async () => {
+          let bal = await erc20Contract.balanceOf(userAddress)
+          expect(bal).to.be.eql(BigNumber.from(0))
+          bal = await erc20Contract.balanceOf(proxy)
+          expect(bal).to.be.eql(BigNumber.from(0))
+          bal = await erc20Contract.balanceOf(recipientAddress)
+          expect(bal.toNumber()).to.be.gt(0) // Gains extra tokens from overpayment
+        })
+
+        it('should reduce niftyswap ERC-1155 balance', async () => {
+          let niftyswapAddresses = new Array(nTokenTypes.toNumber()).fill(niftyswap)
+          let balances = await userErc1155Contract.balanceOfBatch(niftyswapAddresses, ids)
+          for (let i = 0; i < ids.length; i++) {
+            expect(balances[i]).to.be.eql(amounts[i].sub(swapAmounts[i]))
+          }
+        })
+
+        it('should emit ItemBurn event', async () => {
+          let filterFromOperatorContract: ethers.ethers.EventFilter
+
+          // Get event filter to get internal tx event
+          filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+          // Get logs from internal transaction event
+          // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+          filterFromOperatorContract.fromBlock = 0
+          let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+          expect(logs[0].topics[0]).to.be.eql(
+            paymentContract.interface.getEventTopic(
+              paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])']
+            )
+          )
+        })
+
+        describe('ItemBurn Event', () => {
+          let args
+          beforeEach(async () => {
+            let filterFromOperatorContract: ethers.ethers.EventFilter
+
+            // Get event filter to get internal tx event
+            filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+            // Get logs from internal transaction event
+            // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+            filterFromOperatorContract.fromBlock = 0
+            let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+            args = paymentContract.interface.decodeEventLog(
+              paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+              logs[0].data,
+              logs[0].topics
+            )
+          })
+
+          it('should have spender as right address as `spender` field', async () => {
+            expect(args.spender).to.be.eql(userAddress)
+          })
+
+          it('should have recipient as right address as `itemRecipient` field', async () => {
+            expect(args.itemRecipient).to.be.eql(recipientAddress)
+          })
+
+          it('should have correct nonce as `nonce` field', async () => {
+            expect(args.nonce).to.be.eql(BigNumber.from(0))
+          })
+
+          it('should have correct item purchased as `itemIDsPurchased` field', async () => {
+            expect(args.itemIDsPurchased[0]).to.be.eql(BigNumber.from(purchasedItemID))
+          })
         })
       })
     })

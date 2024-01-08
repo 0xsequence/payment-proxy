@@ -12,7 +12,7 @@ import 'solidity-coverage'
 
 const ganacheNetwork = {
   url: 'http://127.0.0.1:8545',
-  blockGasLimit: 6000000000
+  blockGasLimit: 0xfffffffffff
 }
 
 const config: HardhatUserConfig = {

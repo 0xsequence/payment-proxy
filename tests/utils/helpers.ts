@@ -55,8 +55,8 @@ export function RevertError(errorMessage?: string) {
   if (!errorMessage) {
     return /Transaction reverted and Hardhat couldn't infer the reason/
   } else {
-    // return new RegExp(`${errorMessage}`)
-    return new RegExp(`VM Exception while processing transaction: reverted with reason string ["']${errorMessage}["']`)
+    return new RegExp(`${errorMessage}`)
+    // return new RegExp(`VM Exception while processing transaction: reverted with reason string ["']${errorMessage}["']`)
   }
 }
 
