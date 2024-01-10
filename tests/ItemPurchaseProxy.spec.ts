@@ -551,9 +551,9 @@ describe('PaymentProxy', () => {
           let bal = await erc20Contract.balanceOf(userAddress)
           expect(bal).to.be.eql(BigNumber.from(0))
           bal = await erc20Contract.balanceOf(proxy)
-          expect(bal).to.be.eql(BigNumber.from(0))
-          bal = await erc20Contract.balanceOf(recipientAddress)
           expect(bal.toNumber()).to.be.gt(0) // Gains extra tokens from overpayment
+          bal = await erc20Contract.balanceOf(recipientAddress)
+          expect(bal).to.be.eql(BigNumber.from(0))
         })
 
         it('should reduce niftyswap ERC-1155 balance', async () => {

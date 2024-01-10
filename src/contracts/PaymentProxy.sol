@@ -97,6 +97,7 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
    * @param _nonce            Purchase nonce, to prevent repeats
    * @param _itemIDsPurchased Items that are supposed to be received
    * @param _itemRecipient    Who is supposed to receive the items
+   * @notice Overpayment is allowed, extra currency tokens will be retained by this contract
    */
   function buyAndBurn(
       address _niftyswapAddress,
@@ -115,7 +116,6 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
     );
 
     // Prepare ERC-20
-    uint256 currBal = IERC20(_currencyToken).balanceOf(address(this));
     TransferHelper.safeTransferFrom(_currencyToken, msg.sender, address(this), _currencyAmount);
     TransferHelper.safeApprove(_currencyToken, _niftyswapAddress, _currencyAmount);
 
@@ -140,12 +140,6 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
     // Reclaim memory
     delete _burnOrder;
     delete _caller;
-
-    // Return excess currency to user
-    uint256 newBal = IERC20(_currencyToken).balanceOf(address(this));
-    if (newBal > currBal) {
-      TransferHelper.safeTransfer(_currencyToken, itemRecipient, newBal - currBal);
-    }
   }
 
   /***********************************|
