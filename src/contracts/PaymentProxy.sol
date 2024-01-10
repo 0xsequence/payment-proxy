@@ -2,12 +2,13 @@ pragma solidity 0.7.4;
 pragma experimental ABIEncoderV2;
 
 import "./utils/Ownable.sol";
-import "./utils/TransferHelper.sol";
+import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import "@0xsequence/erc-1155/contracts/utils/SafeMath.sol";
 import "@0xsequence/erc-1155/contracts/interfaces/IERC165.sol";
 import "@0xsequence/erc-1155/contracts/interfaces/IERC20.sol";
 import "@0xsequence/erc-1155/contracts/interfaces/IERC1155MintBurn.sol";
 import "@0xsequence/erc-1155/contracts/interfaces/IERC1155TokenReceiver.sol";
+import "@0xsequence/niftyswap/contracts/interfaces/INiftyswapExchange20.sol";
 
 /**
  * @notice Allows users to purchase off-chain assets with ERC-20s or by burning ERC-1155 tokens
@@ -21,6 +22,10 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
   // Track payment nonces to prevent accidental repeat orders
   mapping (address => uint256) public nonces;
   string public name; // Name of contract
+
+  // Stored variable for buyAndBurn
+  address private _caller;
+  BurnOrder private _burnOrder;
 
   // Encoded data in ERC-1155 transfers, for log event
   struct BurnOrder {
@@ -54,7 +59,6 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
   |          Purchase Method          |
   |__________________________________*/
 
-
   /**
    * @notice User is sending ERC-20 tokens for payment
    * @param _currencyToken     Address of ERC-20 token used as currency by user
@@ -75,7 +79,7 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
     require(currentNonce == _nonce, "PaymentProxy#purchaseItems: INVALID_NONCE");
     nonces[msg.sender] = currentNonce + 1;
 
-    // If an address is specifiedm use it as receiver, otherwise use msg.sender address
+    // If an address is specified use it as receiver, otherwise use msg.sender address
     address itemRecipient = _itemRecipient != address(0x0) ? _itemRecipient : msg.sender;
 
     // Transfer currency tokens here
@@ -83,6 +87,66 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
     emit ItemPurchase(msg.sender, itemRecipient, _nonce, _itemIDsPurchased);
   }
 
+  /**
+   * @notice User is purchasing items by purchasing ERC-1155 tokens with ERC-20 tokens, then burning them
+   * @param _niftyswapAddress Address of Niftyswap exchange contract
+   * @param _swapTokenIds     Array of token IDs to purchase
+   * @param _swapAmounts      Array of amounts of each token ID to purchase
+   * @param _currencyToken    Address of ERC-20 token used as currency by user
+   * @param _currencyAmount   Amount ERC-20 token sent as currency by user
+   * @param _nonce            Purchase nonce, to prevent repeats
+   * @param _itemIDsPurchased Items that are supposed to be received
+   * @param _itemRecipient    Who is supposed to receive the items
+   */
+  function buyAndBurn(
+      address _niftyswapAddress,
+      uint256[] calldata _swapTokenIds,
+      uint256[] calldata _swapAmounts,
+      address _currencyToken,
+      uint256 _currencyAmount,
+      uint32 _nonce,
+      uint256[] calldata _itemIDsPurchased,
+      address _itemRecipient
+  ) external {
+    // Validate inputs
+    require(
+      _niftyswapAddress != address(0x0) && _swapTokenIds.length > 0 && _swapAmounts.length > 0 && _swapTokenIds.length == _swapAmounts.length && _currencyToken != address(0x0) && _currencyAmount > 0,
+      "PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT"
+    );
+
+    // Prepare ERC-20
+    uint256 currBal = IERC20(_currencyToken).balanceOf(address(this));
+    TransferHelper.safeTransferFrom(_currencyToken, msg.sender, address(this), _currencyAmount);
+    TransferHelper.safeApprove(_currencyToken, _niftyswapAddress, _currencyAmount);
+
+    // If an address is specified use it as receiver, otherwise use msg.sender address
+    address itemRecipient = _itemRecipient != address(0x0) ? _itemRecipient : msg.sender;
+
+    // We store here as Niftyswap does not support passing data in onERC1155Received callbacks
+    _burnOrder = BurnOrder(itemRecipient, _nonce, _itemIDsPurchased);
+    _caller = msg.sender;
+
+    // Purchase tokens from Niftyswap
+    INiftyswapExchange20(_niftyswapAddress).buyTokens(
+      _swapTokenIds,
+      _swapAmounts,
+      _currencyAmount,
+      block.timestamp, // solhint-disable-line not-rely-on-time
+      address(this),
+      new address[](0),
+      new uint256[](0)
+    );
+
+    // Reclaim memory
+    delete _burnOrder;
+    delete _caller;
+
+    // Return excess currency to user
+    uint256 newBal = IERC20(_currencyToken).balanceOf(address(this));
+    if (newBal > currBal) {
+      TransferHelper.safeTransfer(_currencyToken, itemRecipient, newBal - currBal);
+    }
+  }
 
   /***********************************|
   |      Receiver Method Handler      |
@@ -127,6 +191,7 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
    * @param _ids     An array containing ids of each Token being transferred
    * @param _amounts An array containing amounts of each Token being transferred
    * @param _data    Encoded BurnOrder struct with order information
+   * @dev `_data` is empty when called from Niftyswap via buyAndBurn(). Use stored burn order instead.
    */
   function onERC1155BatchReceived(
     address, // _operator
@@ -137,8 +202,19 @@ contract PaymentProxy is IERC1155TokenReceiver, Ownable {
   )
     public override returns(bytes4)
   { 
-    // Decode struct to retrieve the burn token order information
-    BurnOrder memory burnOrder = abi.decode(_data, (BurnOrder));
+    BurnOrder memory burnOrder;
+    if (_data.length == 0) {
+      // Use stored burn order from buyAndBurn()
+      burnOrder = _burnOrder;
+      // When using buyAndBurn() the _from address is the original caller
+      _from = _caller;
+    } else {
+      // Decode struct to retrieve the burn token order information
+      burnOrder = abi.decode(_data, (BurnOrder));
+    }
+
+    // Validate burn order
+    require(burnOrder.itemIDsPurchased.length > 0, "PaymentProxy#onERC1155BatchReceived: INVALID_ITEMS_PURCHASED");
 
     // If an address is specified, use it as receiver, otherwise use _from address
     address itemRecipient = burnOrder.itemRecipient != address(0x0) ? burnOrder.itemRecipient : _from;

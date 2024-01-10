@@ -1,46 +1,23 @@
 import * as ethers from 'ethers'
 
-import { 
-  AbstractContract, 
-  expect,
-  RevertError,
-  createTestWallet,
-  getBurnOrderRequestData,
-  ZERO_ADDRESS
-} from './utils'
+import { AbstractContract, expect, RevertError, createTestWallet, getBurnOrderRequestData, ZERO_ADDRESS } from './utils'
 
-import {
-  ERC1155Mock,
-  ERC20MintMock,
-  PaymentProxy
-} from 'src/cache/typechain'
+import { ERC1155Mock, ERC20MintMock, NiftyswapExchange20Mock, NiftyswapFactory20Mock, PaymentProxy } from 'src/cache/typechain'
 
 import { BigNumber, constants } from 'ethers'
 
 import { web3 } from 'hardhat'
+import { deployNiftyswapFactory20, getAddLiquidityData } from './utils/niftyswap'
 
 // init test wallets from package.json mnemonic
 
-const {
-  wallet: ownerWallet,
-  provider: ownerProvider,
-  signer: ownerSigner
-} = createTestWallet(web3, 1)
+const { wallet: ownerWallet, provider: ownerProvider, signer: ownerSigner } = createTestWallet(web3, 1)
 
+const { wallet: userWallet, provider: userProvider, signer: userSigner } = createTestWallet(web3, 2)
 
-const {
-  wallet: userWallet,
-  provider: userProvider,
-  signer: userSigner
-} = createTestWallet(web3, 2)
+const { wallet: recipientWallet, provider: recipientProvider, signer: recipientSigner } = createTestWallet(web3, 4)
 
-const {
-  wallet: recipientWallet,
-  provider: recipientProvider,
-  signer: recipientSigner
-} = createTestWallet(web3, 4)
-
-const getBig = (id: number) => BigNumber.from(id);
+const getBig = (id: number) => BigNumber.from(id)
 
 describe('PaymentProxy', () => {
   let ownerAddress: string
@@ -49,6 +26,7 @@ describe('PaymentProxy', () => {
   let erc20Abstract: AbstractContract
   let paymentAbstract: AbstractContract
   let erc1155Abstract: AbstractContract
+  let niftyswapAbstract: AbstractContract
 
   // ERC-20 currency contract
   let erc20Contract: ERC20MintMock
@@ -57,7 +35,6 @@ describe('PaymentProxy', () => {
   // ERC-1155 currency contract
   let erc1155Contract: ERC1155Mock
   let userErc1155Contract: ERC1155Mock
-  
 
   // Skyweaver Assets
   let paymentContract: PaymentProxy
@@ -66,26 +43,27 @@ describe('PaymentProxy', () => {
   let userPaymentContract: PaymentProxy
 
   // Pass gas since ganache can't figure it out
-  let TX_PARAM = {gasLimit: 2000000}
+  let TX_PARAM = { gasLimit: 5000000 }
 
   // ERC-1155 Token Param
-  const nTokenTypes    = BigNumber.from(30).add(1) 
+  const nTokenTypes = BigNumber.from(30).add(1)
   const nTokensPerType = BigNumber.from(100).mul(100)
 
   // erc20 Param, 6 decimals
   const baseTokenAmount = BigNumber.from(10000000).mul(BigNumber.from(10).pow(6))
 
   // Item ID to purchase
-  const purchasedItemID = 999;
-  const proxyName = "TEST PAYMENT"
+  const purchasedItemID = 999
+  const proxyName = 'TEST PAYMENT'
 
   // Arrays for ERC-1155
-  const ids = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => getBig(i+1))
-  const amounts = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => nTokensPerType)
+  const ids = new Array(nTokenTypes.toNumber()).fill('').map((_a, i) => getBig(i + 1))
+  const amounts = new Array(nTokenTypes.toNumber()).fill(nTokensPerType)
 
   // Init addresses
-  let proxy;
-  let currency;
+  let proxy
+  let currency
+  let token
 
   // load contract abi and deploy to test server
   before(async () => {
@@ -95,29 +73,31 @@ describe('PaymentProxy', () => {
     erc20Abstract = await AbstractContract.fromArtifactName('ERC20MintMock')
     erc1155Abstract = await AbstractContract.fromArtifactName('ERC1155Mock')
     paymentAbstract = await AbstractContract.fromArtifactName('PaymentProxy')
+    niftyswapAbstract = await AbstractContract.fromArtifactName('NiftyswapExchange20Mock')
   })
 
   // deploy before each test, to reset state of contract
   beforeEach(async () => {
     // Deploy ERC20 contract
-    erc20Contract = await erc20Abstract.deploy(ownerWallet) as ERC20MintMock
-    userErc20Contract = await erc20Contract.connect(userSigner) as ERC20MintMock
+    erc20Contract = (await erc20Abstract.deploy(ownerWallet)) as ERC20MintMock
+    userErc20Contract = (await erc20Contract.connect(userSigner)) as ERC20MintMock
 
     // Deploy ERC-1155 Contract
-    erc1155Contract = await erc1155Abstract.deploy(ownerWallet) as ERC1155Mock
+    erc1155Contract = (await erc1155Abstract.deploy(ownerWallet)) as ERC1155Mock
     userErc1155Contract = await erc1155Contract.connect(userSigner)
 
     // Deploy factory
-    paymentContract = await paymentAbstract.deploy(ownerWallet, [ownerAddress, proxyName]) as PaymentProxy
-    userPaymentContract = await paymentContract.connect(userSigner) as PaymentProxy
+    paymentContract = (await paymentAbstract.deploy(ownerWallet, [ownerAddress, proxyName])) as PaymentProxy
+    userPaymentContract = (await paymentContract.connect(userSigner)) as PaymentProxy
 
-    // Assing vars
+    // Address vars
     proxy = paymentContract.address
     currency = erc20Contract.address
+    token = erc1155Contract.address
 
     // Mint tokens to user
     await erc20Contract.mockMint(userAddress, baseTokenAmount)
-    await erc1155Contract.batchMint(userAddress, ids, amounts , [])
+    await erc1155Contract.batchMint(userAddress, ids, amounts, [])
   })
 
   describe('Getter functions', () => {
@@ -141,54 +121,93 @@ describe('PaymentProxy', () => {
   })
 
   describe('purchaseItems()', () => {
-    const nonce = 0;
+    const nonce = 0
 
     beforeEach(async () => {
       await userErc20Contract.approve(proxy, baseTokenAmount)
     })
 
     it('should PASS if caller sends erc-20', async () => {
-      const tx = userPaymentContract.purchaseItems(currency, baseTokenAmount, nonce, [purchasedItemID], recipientAddress, TX_PARAM)
+      const tx = userPaymentContract.purchaseItems(
+        currency,
+        baseTokenAmount,
+        nonce,
+        [purchasedItemID],
+        recipientAddress,
+        TX_PARAM
+      )
       await expect(tx).to.be.fulfilled
     })
 
     it('should PASS if recipient is 0x0', async () => {
-      const tx = userPaymentContract.purchaseItems(currency, baseTokenAmount, nonce, [purchasedItemID], ethers.constants.AddressZero, TX_PARAM)
+      const tx = userPaymentContract.purchaseItems(
+        currency,
+        baseTokenAmount,
+        nonce,
+        [purchasedItemID],
+        ethers.constants.AddressZero,
+        TX_PARAM
+      )
       await expect(tx).to.be.fulfilled
 
       // Check event
       let filterFromOperatorContract: ethers.ethers.EventFilter
 
       // Get event filter to get internal tx event
-      filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null);
+      filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null)
 
       // Get logs from internal transaction event
       // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-      filterFromOperatorContract.fromBlock = 0;
-      const logs = await ownerProvider.getLogs(filterFromOperatorContract);
-      let args = paymentContract.interface.decodeEventLog(paymentContract.interface.events["ItemPurchase(address,address,uint256,uint256[])"],logs[0].data, logs[0].topics)
+      filterFromOperatorContract.fromBlock = 0
+      const logs = await ownerProvider.getLogs(filterFromOperatorContract)
+      let args = paymentContract.interface.decodeEventLog(
+        paymentContract.interface.events['ItemPurchase(address,address,uint256,uint256[])'],
+        logs[0].data,
+        logs[0].topics
+      )
 
       expect(args.itemRecipient).to.be.eql(userAddress)
     })
 
     it('should REVERT if nonce is incorrect', async () => {
       const badNonce = nonce + 1
-      const tx = userPaymentContract.purchaseItems(currency, baseTokenAmount, badNonce, [purchasedItemID], recipientAddress, TX_PARAM)
-      await expect(tx).to.be.rejectedWith(RevertError("PaymentProxy#purchaseItems: INVALID_NONCE"))
+      const tx = userPaymentContract.purchaseItems(
+        currency,
+        baseTokenAmount,
+        badNonce,
+        [purchasedItemID],
+        recipientAddress,
+        TX_PARAM
+      )
+      await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#purchaseItems: INVALID_NONCE'))
 
       const badNonce2 = BigNumber.from(2).pow(32).sub(1)
-      const tx2 = userPaymentContract.purchaseItems(currency, baseTokenAmount, badNonce2, [purchasedItemID], recipientAddress, TX_PARAM)
-      await expect(tx2).to.be.rejectedWith(RevertError("PaymentProxy#purchaseItems: INVALID_NONCE"))
+      const tx2 = userPaymentContract.purchaseItems(
+        currency,
+        baseTokenAmount,
+        badNonce2,
+        [purchasedItemID],
+        recipientAddress,
+        TX_PARAM
+      )
+      await expect(tx2).to.be.rejectedWith(RevertError('PaymentProxy#purchaseItems: INVALID_NONCE'))
     })
 
     it('should REVERT if amount is 0', async () => {
       const tx = userPaymentContract.purchaseItems(currency, 0, nonce, [purchasedItemID], recipientAddress, TX_PARAM)
-      await expect(tx).to.be.rejectedWith(RevertError("PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT"))
+      await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT'))
     })
 
     it('should REVERT if erc-20 is 0x0', async () => {
-      const tx = userPaymentContract.purchaseItems(ethers.constants.AddressZero, baseTokenAmount, nonce, [purchasedItemID], recipientAddress, TX_PARAM)
-      await expect(tx).to.be.rejectedWith(RevertError("PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT"))
+      const tx = userPaymentContract.purchaseItems(
+        ethers.constants.AddressZero,
+        baseTokenAmount,
+        nonce,
+        [purchasedItemID],
+        recipientAddress,
+        TX_PARAM
+      )
+      await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#purchaseItems: INVALID_PAYMENT_TOKEN_OR_AMOUNT'))
     })
 
     context('When assets were sent to proxy', () => {
@@ -201,12 +220,11 @@ describe('PaymentProxy', () => {
         await erc20Contract.mockMint(userAddress, baseTokenAmount)
         await userErc20Contract.approve(proxy, baseTokenAmount)
         await userPaymentContract.purchaseItems(currency, baseTokenAmount, 1, [purchasedItemID], recipientAddress, TX_PARAM)
-      
+
         const nonce = await paymentContract.nonces(userAddress)
         expect(nonce).to.be.eql(BigNumber.from(2))
       })
-      
-      
+
       it('should increase proxy ERC-20 balance to amount received', async () => {
         const balance = await erc20Contract.balanceOf(proxy)
         expect(balance).to.be.eql(baseTokenAmount)
@@ -221,46 +239,53 @@ describe('PaymentProxy', () => {
         let filterFromOperatorContract: ethers.ethers.EventFilter
 
         // Get event filter to get internal tx event
-        filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null);
+        filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null)
 
         // Get logs from internal transaction event
         // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-        filterFromOperatorContract.fromBlock = 0;
-        let logs = await ownerProvider.getLogs(filterFromOperatorContract);
-        expect(logs[0].topics[0]).to.be.eql(paymentContract.interface.getEventTopic(paymentContract.interface.events["ItemPurchase(address,address,uint256,uint256[])"]))
+        filterFromOperatorContract.fromBlock = 0
+        let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+        expect(logs[0].topics[0]).to.be.eql(
+          paymentContract.interface.getEventTopic(
+            paymentContract.interface.events['ItemPurchase(address,address,uint256,uint256[])']
+          )
+        )
       })
-      
+
       describe('ItemPurchase Event', () => {
-        let args;
+        let args
         beforeEach(async () => {
           let filterFromOperatorContract: ethers.ethers.EventFilter
 
           // Get event filter to get internal tx event
-          filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null);
-  
+          filterFromOperatorContract = paymentContract.filters.ItemPurchase(null, null, null)
+
           // Get logs from internal transaction event
           // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-          filterFromOperatorContract.fromBlock = 0;
-          let logs = await ownerProvider.getLogs(filterFromOperatorContract);
-          args = paymentContract.interface.decodeEventLog(paymentContract.interface.events["ItemPurchase(address,address,uint256,uint256[])"],logs[0].data, logs[0].topics)
+          filterFromOperatorContract.fromBlock = 0
+          let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+          args = paymentContract.interface.decodeEventLog(
+            paymentContract.interface.events['ItemPurchase(address,address,uint256,uint256[])'],
+            logs[0].data,
+            logs[0].topics
+          )
         })
 
-        it('should have spender as right address as `spender` field', async () => {  
+        it('should have spender as right address as `spender` field', async () => {
           expect(args.spender).to.be.eql(userAddress)
         })
 
-        it('should have recipient as right address as `itemRecipient` field', async () => {  
+        it('should have recipient as right address as `itemRecipient` field', async () => {
           expect(args.itemRecipient).to.be.eql(recipientAddress)
         })
 
-        it('should have correct nonce as `nonce` field', async () => {  
+        it('should have correct nonce as `nonce` field', async () => {
           expect(args.nonce).to.be.eql(BigNumber.from(0))
         })
 
-        it('should have correct item purchased as `itemIDsPurchased` field', async () => {  
+        it('should have correct item purchased as `itemIDsPurchased` field', async () => {
           expect(args.itemIDsPurchased[0]).to.be.eql(BigNumber.from(purchasedItemID))
         })
-
       })
     })
   })
@@ -269,7 +294,7 @@ describe('PaymentProxy', () => {
     let data
 
     before(async () => {
-     data = getBurnOrderRequestData(recipientAddress, 0, [purchasedItemID])
+      data = getBurnOrderRequestData(recipientAddress, 0, [purchasedItemID])
     })
 
     it('should PASS if caller sends items', async () => {
@@ -286,44 +311,48 @@ describe('PaymentProxy', () => {
       let filterFromOperatorContract: ethers.ethers.EventFilter
 
       // Get event filter to get internal tx event
-      filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null);
+      filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
 
       // Get logs from internal transaction event
       // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-      filterFromOperatorContract.fromBlock = 0;
-      const logs = await ownerProvider.getLogs(filterFromOperatorContract);
+      filterFromOperatorContract.fromBlock = 0
+      const logs = await ownerProvider.getLogs(filterFromOperatorContract)
 
-      let args = paymentContract.interface.decodeEventLog(paymentContract.interface.events["ItemBurn(address,address,uint256,uint256[])"],logs[0].data, logs[0].topics)
+      let args = paymentContract.interface.decodeEventLog(
+        paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+        logs[0].data,
+        logs[0].topics
+      )
       expect(args.itemRecipient).to.be.eql(userAddress)
     })
 
     it('should REVERT if nonce is incorrect', async () => {
       const badData = getBurnOrderRequestData(userAddress, 1, [purchasedItemID])
       const tx = userErc1155Contract.safeBatchTransferFrom(userAddress, proxy, ids, amounts, badData, TX_PARAM)
-      await expect(tx).to.be.rejectedWith(RevertError("PaymentProxy#onERC1155BatchReceived: INVALID_NONCE"))
+      await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#onERC1155BatchReceived: INVALID_NONCE'))
 
       const badData2 = getBurnOrderRequestData(userAddress, BigNumber.from(2).pow(32).sub(1), [purchasedItemID])
       const tx2 = userErc1155Contract.safeBatchTransferFrom(userAddress, proxy, ids, amounts, badData2, TX_PARAM)
-      await expect(tx2).to.be.rejectedWith(RevertError("PaymentProxy#onERC1155BatchReceived: INVALID_NONCE"))
+      await expect(tx2).to.be.rejectedWith(RevertError('PaymentProxy#onERC1155BatchReceived: INVALID_NONCE'))
     })
 
-    context('When assets were sent to proxy', () => {      
+    context('When assets were sent to proxy', () => {
       beforeEach(async () => {
         await userErc1155Contract.safeBatchTransferFrom(userAddress, proxy, ids, amounts, data, TX_PARAM)
       })
 
       it('should update user payment nonce', async () => {
         // Do another txn for better validation
-        await erc1155Contract.batchMint(userAddress, ids, amounts , [])
+        await erc1155Contract.batchMint(userAddress, ids, amounts, [])
         const data2 = getBurnOrderRequestData(recipientAddress, 1, [purchasedItemID])
         await userErc1155Contract.safeBatchTransferFrom(userAddress, proxy, ids, amounts, data2, TX_PARAM)
-      
+
         const nonce = await paymentContract.nonces(userAddress)
         expect(nonce).to.be.eql(BigNumber.from(2))
       })
-      
+
       it('should leave proxy ERC-1155 balance of 0', async () => {
-        let proxy_addresses = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => proxy)
+        let proxy_addresses = new Array(nTokenTypes.toNumber()).fill(proxy)
         let proxy_balances = await userErc1155Contract.balanceOfBatch(proxy_addresses, ids)
         for (let i = 0; i < ids.length; i++) {
           expect(proxy_balances[i]).to.be.eql(constants.Zero)
@@ -331,7 +360,7 @@ describe('PaymentProxy', () => {
       })
 
       it('should update users ERC-1155 balance', async () => {
-        let user_addresses = new Array(nTokenTypes.toNumber()).fill('').map((a, i) => userAddress)
+        let user_addresses = new Array(nTokenTypes.toNumber()).fill(userAddress)
         let userBalances = await userErc1155Contract.balanceOfBatch(user_addresses, ids)
         for (let i = 0; i < ids.length; i++) {
           expect(userBalances[i]).to.be.eql(constants.Zero)
@@ -342,49 +371,254 @@ describe('PaymentProxy', () => {
         let filterFromOperatorContract: ethers.ethers.EventFilter
 
         // Get event filter to get internal tx event
-        filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null);
+        filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
 
         // Get logs from internal transaction event
         // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-        filterFromOperatorContract.fromBlock = 0;
-        let logs = await ownerProvider.getLogs(filterFromOperatorContract);
-        expect(logs[0].topics[0]).to.be.eql(paymentContract.interface.getEventTopic(paymentContract.interface.events["ItemBurn(address,address,uint256,uint256[])"]))
+        filterFromOperatorContract.fromBlock = 0
+        let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+        expect(logs[0].topics[0]).to.be.eql(
+          paymentContract.interface.getEventTopic(paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'])
+        )
       })
-      
+
       describe('ItemBurn Event', () => {
-        let args;
+        let args
         beforeEach(async () => {
           let filterFromOperatorContract: ethers.ethers.EventFilter
 
           // Get event filter to get internal tx event
-          filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null);
-  
+          filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
           // Get logs from internal transaction event
           // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
-          filterFromOperatorContract.fromBlock = 0;
-          let logs = await ownerProvider.getLogs(filterFromOperatorContract);
-          args = paymentContract.interface.decodeEventLog(paymentContract.interface.events["ItemBurn(address,address,uint256,uint256[])"],logs[0].data, logs[0].topics)
+          filterFromOperatorContract.fromBlock = 0
+          let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+          args = paymentContract.interface.decodeEventLog(
+            paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+            logs[0].data,
+            logs[0].topics
+          )
         })
 
-        it('should have spender as right address as `spender` field', async () => {  
+        it('should have spender as right address as `spender` field', async () => {
           expect(args.spender).to.be.eql(userAddress)
         })
 
-        it('should have recipient as right address as `itemRecipient` field', async () => {  
+        it('should have recipient as right address as `itemRecipient` field', async () => {
           expect(args.itemRecipient).to.be.eql(recipientAddress)
         })
 
-        it('should have correct nonce as `nonce` field', async () => {  
+        it('should have correct nonce as `nonce` field', async () => {
           expect(args.nonce).to.be.eql(BigNumber.from(0))
         })
 
-        it('should have correct item purchased as `itemIDsPurchased` field', async () => {  
+        it('should have correct item purchased as `itemIDsPurchased` field', async () => {
           expect(args.itemIDsPurchased[0]).to.be.eql(BigNumber.from(purchasedItemID))
         })
-
       })
     })
-    
+
+    describe('Buy and Burn', () => {
+      let niftyswap: string
+
+      let deadline = Math.floor(Date.now() / 1000) + 100000
+      let swapAmounts = new Array(nTokenTypes.toNumber()).fill(BigNumber.from(100))
+
+      before(async () => {
+        // Set up Niftyswap
+        data = getBurnOrderRequestData(recipientAddress, 0, [purchasedItemID])
+      })
+
+      // deploy before each test, to reset state of contract
+      beforeEach(async () => {
+        // Deploy Niftyswap
+        const niftyswapFactoryContract = (await deployNiftyswapFactory20(ownerWallet, ownerAddress)) as NiftyswapFactory20Mock
+        await niftyswapFactoryContract.createExchange(token, currency, 0, 0)
+        niftyswap = await niftyswapFactoryContract.tokensToExchange(token, currency, 0, 0)
+
+        // Add liquidity
+        await erc20Contract.mockMint(ownerAddress, baseTokenAmount)
+        await erc20Contract.approve(niftyswap, baseTokenAmount)
+        await erc1155Contract.batchMint(ownerAddress, ids, amounts, [])
+        const currPerLiq = baseTokenAmount.div(nTokenTypes)
+        const maxCurrencies = new Array(nTokenTypes.toNumber()).fill(currPerLiq)
+        await erc1155Contract.safeBatchTransferFrom(
+          ownerAddress,
+          niftyswap,
+          ids,
+          amounts,
+          getAddLiquidityData(maxCurrencies, deadline),
+          TX_PARAM
+        )
+
+        // Approve the proxy to transfer ERC-20 for user
+        await userErc20Contract.approve(proxy, baseTokenAmount)
+      })
+
+      it('should PASS if swap succeeds', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          0,
+          [purchasedItemID],
+          recipientAddress,
+          TX_PARAM
+        )
+        await expect(tx).to.be.fulfilled
+      })
+
+      it('should PASS if recipient is 0x0', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          0,
+          [purchasedItemID],
+          ethers.constants.AddressZero,
+          TX_PARAM
+        )
+        await expect(tx).to.be.fulfilled
+
+        // Check event
+        let filterFromOperatorContract: ethers.ethers.EventFilter
+
+        // Get event filter to get internal tx event
+        filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+        // Get logs from internal transaction event
+        // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+        filterFromOperatorContract.fromBlock = 0
+        const logs = await ownerProvider.getLogs(filterFromOperatorContract)
+
+        let args = paymentContract.interface.decodeEventLog(
+          paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+          logs[0].data,
+          logs[0].topics
+        )
+        expect(args.itemRecipient).to.be.eql(userAddress)
+      })
+
+      it('should REVERT if nonce is incorrect', async () => {
+        const tx = userPaymentContract.buyAndBurn(
+          niftyswap,
+          ids,
+          swapAmounts,
+          currency,
+          baseTokenAmount,
+          1,
+          [purchasedItemID],
+          recipientAddress,
+          TX_PARAM
+        )
+        await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#onERC1155BatchReceived: INVALID_NONCE'))
+      })
+
+      context('When purchase completed', () => {
+        beforeEach(async () => {
+          await userPaymentContract.buyAndBurn(
+            niftyswap,
+            ids,
+            swapAmounts,
+            currency,
+            baseTokenAmount, // Overpayment
+            0,
+            [purchasedItemID],
+            recipientAddress,
+            TX_PARAM
+          )
+        })
+
+        it('should update user payment nonce', async () => {
+          const nonce = await paymentContract.nonces(userAddress)
+          expect(nonce).to.be.eql(BigNumber.from(1))
+        })
+
+        it('should leave proxy ERC-1155 balance of 0', async () => {
+          let proxy_addresses = new Array(nTokenTypes.toNumber()).fill(proxy)
+          let proxy_balances = await userErc1155Contract.balanceOfBatch(proxy_addresses, ids)
+          for (let i = 0; i < ids.length; i++) {
+            expect(proxy_balances[i]).to.be.eql(constants.Zero)
+          }
+        })
+
+        it('should update ERC-20 balances', async () => {
+          let bal = await erc20Contract.balanceOf(userAddress)
+          expect(bal).to.be.eql(BigNumber.from(0))
+          bal = await erc20Contract.balanceOf(proxy)
+          expect(bal).to.be.eql(BigNumber.from(0))
+          bal = await erc20Contract.balanceOf(recipientAddress)
+          expect(bal.toNumber()).to.be.gt(0) // Gains extra tokens from overpayment
+        })
+
+        it('should reduce niftyswap ERC-1155 balance', async () => {
+          let niftyswapAddresses = new Array(nTokenTypes.toNumber()).fill(niftyswap)
+          let balances = await userErc1155Contract.balanceOfBatch(niftyswapAddresses, ids)
+          for (let i = 0; i < ids.length; i++) {
+            expect(balances[i]).to.be.eql(amounts[i].sub(swapAmounts[i]))
+          }
+        })
+
+        it('should emit ItemBurn event', async () => {
+          let filterFromOperatorContract: ethers.ethers.EventFilter
+
+          // Get event filter to get internal tx event
+          filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+          // Get logs from internal transaction event
+          // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+          filterFromOperatorContract.fromBlock = 0
+          let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+          expect(logs[0].topics[0]).to.be.eql(
+            paymentContract.interface.getEventTopic(
+              paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])']
+            )
+          )
+        })
+
+        describe('ItemBurn Event', () => {
+          let args
+          beforeEach(async () => {
+            let filterFromOperatorContract: ethers.ethers.EventFilter
+
+            // Get event filter to get internal tx event
+            filterFromOperatorContract = paymentContract.filters.ItemBurn(null, null, null)
+
+            // Get logs from internal transaction event
+            // @ts-ignore (https://github.com/ethers-io/ethers.js/issues/204#issuecomment-427059031)
+            filterFromOperatorContract.fromBlock = 0
+            let logs = await ownerProvider.getLogs(filterFromOperatorContract)
+            args = paymentContract.interface.decodeEventLog(
+              paymentContract.interface.events['ItemBurn(address,address,uint256,uint256[])'],
+              logs[0].data,
+              logs[0].topics
+            )
+          })
+
+          it('should have spender as right address as `spender` field', async () => {
+            expect(args.spender).to.be.eql(userAddress)
+          })
+
+          it('should have recipient as right address as `itemRecipient` field', async () => {
+            expect(args.itemRecipient).to.be.eql(recipientAddress)
+          })
+
+          it('should have correct nonce as `nonce` field', async () => {
+            expect(args.nonce).to.be.eql(BigNumber.from(0))
+          })
+
+          it('should have correct item purchased as `itemIDsPurchased` field', async () => {
+            expect(args.itemIDsPurchased[0]).to.be.eql(BigNumber.from(purchasedItemID))
+          })
+        })
+      })
+    })
+
     describe('withdrawERC20() function', () => {
       const nonce = 0
       let recipient
@@ -399,15 +633,15 @@ describe('PaymentProxy', () => {
         const tx = paymentContract.withdrawERC20(recipient, erc20Contract.address, TX_PARAM)
         await expect(tx).to.be.fulfilled
       })
-  
+
       it('should REVERT if caller is not owner', async () => {
         const tx = userPaymentContract.withdrawERC20(recipient, erc20Contract.address, TX_PARAM)
         await expect(tx).to.be.rejectedWith(RevertError("Ownable#onlyOwner: SENDER_IS_NOT_OWNER"))
       })
-  
+
       it('should REVERT if recipient is 0x0', async () => {
         const tx = paymentContract.withdrawERC20(ZERO_ADDRESS, erc20Contract.address, TX_PARAM)
-        await expect(tx).to.be.rejectedWith(RevertError("PaymentProxy#withdrawERC20: INVALID_RECIPIENT"))
+        await expect(tx).to.be.rejectedWith(RevertError('PaymentProxy#withdrawERC20: INVALID_RECIPIENT'))
       })
 
       context('When ERC-20 token is withdrawn', () => {
@@ -419,7 +653,7 @@ describe('PaymentProxy', () => {
           let proxy_balance = await erc20Contract.balanceOf(proxy)
           expect(proxy_balance).to.be.eql(constants.Zero)
         })
-  
+
         it('should update recipient ERC-20 balance', async () => {
           let recipient_balance = await erc20Contract.balanceOf(recipient)
           expect(recipient_balance).to.be.eql(baseTokenAmount)
